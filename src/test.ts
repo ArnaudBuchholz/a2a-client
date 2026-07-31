@@ -1,11 +1,13 @@
 import * as readline from 'node:readline';
+import { parseArgs, styleText } from 'node:util';
 import { marked } from 'marked';
-import { markedTerminal } from 'marked-terminal';
+import TerminalRenderer from 'marked-terminal';
 import { ClientFactory, ClientFactoryOptions, RestTransportFactory } from '@a2a-js/sdk/client';
 import { Client } from '@a2a-js/sdk/client';
 import { Role, Task, TaskState } from '@a2a-js/sdk';
 
-marked.use(markedTerminal());
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+marked.setOptions({ renderer: new TerminalRenderer() as any });
 
 function renderMarkdown(text: string): string {
   return marked(text) as string;
@@ -54,7 +56,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
       if (state !== undefined && TERMINAL_STATES.has(state)) {
         const text = task.status?.message?.parts?.[0]?.content;
         const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
+        process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
         break;
       }
     }
@@ -68,7 +70,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
       if (state !== undefined && TERMINAL_STATES.has(state)) {
         const text = message?.parts?.[0]?.content;
         const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
+        process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
         break;
       }
     }
@@ -84,12 +86,19 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
 }
 
 async function main() {
+  const { positionals } = parseArgs({ allowPositionals: true });
+  const url = positionals[0];
+  if (!url) {
+    console.error('Usage: tsx src/test.ts <agent-url>');
+    process.exit(1);
+  }
+
   const clientFactory = new ClientFactory(
     ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
       transports: [new RestTransportFactory()],
     })
   );
-  const client = await clientFactory.createFromUrl('http://localhost:9090');
+  const client = await clientFactory.createFromUrl(url);
   const agentCard = await client.getAgentCard();
   console.log(`Connected to: ${agentCard.name}`);
   console.log('Type your message and press Enter. Type "exit" to quit.\n');
@@ -100,7 +109,7 @@ async function main() {
   let taskId = '';
 
   const ask = () => {
-    rl.question('You: ', async (input) => {
+    rl.question(styleText('yellow', 'You: '), async (input: string) => {
       const text = input.trim();
       if (text.toLowerCase() === 'exit') {
         rl.close();
