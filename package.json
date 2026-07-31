@@ -1,0 +1,29 @@
+{
+  "name": "a2a-client",
+  "version": "1.0.0",
+  "description": "Agent client using agent2agent protocol",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArnaudBuchholz/a2a-client.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ArnaudBuchholz/a2a-client/issues"
+  },
+  "homepage": "https://github.com/ArnaudBuchholz/a2a-client#readme",
+  "devDependencies": {
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^1.0.1",
+    "reserve": "^2.3.5"
+  }
+}
