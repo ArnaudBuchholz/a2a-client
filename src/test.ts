@@ -1,7 +1,15 @@
 import * as readline from 'node:readline';
+import { marked } from 'marked';
+import { markedTerminal } from 'marked-terminal';
 import { ClientFactory, ClientFactoryOptions, RestTransportFactory } from '@a2a-js/sdk/client';
 import { Client } from '@a2a-js/sdk/client';
-import { Role, Task, TaskState, taskStateToJSON } from '@a2a-js/sdk';
+import { Role, Task, TaskState } from '@a2a-js/sdk';
+
+marked.use(markedTerminal());
+
+function renderMarkdown(text: string): string {
+  return marked(text) as string;
+}
 
 const TERMINAL_STATES = new Set([
   TaskState.TASK_STATE_COMPLETED,
@@ -46,7 +54,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
       if (state !== undefined && TERMINAL_STATES.has(state)) {
         const text = task.status?.message?.parts?.[0]?.content;
         const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\nAgent: ${response}\n\n`);
+        process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
         break;
       }
     }
@@ -60,7 +68,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
       if (state !== undefined && TERMINAL_STATES.has(state)) {
         const text = message?.parts?.[0]?.content;
         const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\nAgent: ${response}\n\n`);
+        process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
         break;
       }
     }
@@ -68,7 +76,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
     if (event.payload?.$case === 'message') {
       const text = event.payload.value.parts?.[0]?.content;
       const response = text?.$case === 'text' ? text.value : '(no text)';
-      process.stdout.write(`\nAgent: ${response}\n\n`);
+      process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
     }
   }
 

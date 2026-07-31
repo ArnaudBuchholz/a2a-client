@@ -25,6 +25,8 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "^1.0.1",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
     "reserve": "^2.3.5"
   }
 }
