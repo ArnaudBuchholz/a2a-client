@@ -23,6 +23,20 @@ const TERMINAL_STATES = new Set([
   TaskState.TASK_STATE_AUTH_REQUIRED,
 ]);
 
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+function startSpinner(): () => void {
+  let i = 0;
+  const timer = setInterval(() => {
+    process.stdout.write(`\r${styleText('cyan', SPINNER_FRAMES[i % SPINNER_FRAMES.length])} thinking…`);
+    i++;
+  }, 80);
+  return () => {
+    clearInterval(timer);
+    process.stdout.write('\r\x1b[2K');
+  };
+}
+
 async function sendAndReceive(client: Client, userText: string, contextId: string, taskId: string): Promise<{ contextId: string; taskId: string }> {
   const stream = client.sendMessageStream({
     message: {
@@ -47,40 +61,56 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
   let newContextId = contextId;
   let newTaskId = taskId;
 
-  for await (const event of stream) {
-    if (event.payload?.$case === 'task') {
-      const task = event.payload.value as Task;
-      newContextId = task.contextId || newContextId;
-      newTaskId = task.id || newTaskId;
+  const stopSpinner = startSpinner();
+  let spinnerStopped = false;
 
-      const state = task.status?.state;
-      if (state !== undefined && TERMINAL_STATES.has(state)) {
-        const text = task.status?.message?.parts?.[0]?.content;
+  const ensureSpinnerStopped = () => {
+    if (!spinnerStopped) {
+      stopSpinner();
+      spinnerStopped = true;
+    }
+  };
+
+  try {
+    for await (const event of stream) {
+      ensureSpinnerStopped();
+
+      if (event.payload?.$case === 'task') {
+        const task = event.payload.value as Task;
+        newContextId = task.contextId || newContextId;
+        newTaskId = task.id || newTaskId;
+
+        const state = task.status?.state;
+        if (state !== undefined && TERMINAL_STATES.has(state)) {
+          const text = task.status?.message?.parts?.[0]?.content;
+          const response = text?.$case === 'text' ? text.value : '(no text)';
+          process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
+          break;
+        }
+      }
+
+      if (event.payload?.$case === 'statusUpdate') {
+        const update = event.payload.value;
+        newContextId = update.contextId || newContextId;
+        newTaskId = update.taskId || newTaskId;
+
+        const { state, message } = update.status ?? {};
+        if (state !== undefined && TERMINAL_STATES.has(state)) {
+          const text = message?.parts?.[0]?.content;
+          const response = text?.$case === 'text' ? text.value : '(no text)';
+          process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
+          break;
+        }
+      }
+
+      if (event.payload?.$case === 'message') {
+        const text = event.payload.value.parts?.[0]?.content;
         const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
-        break;
+        process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
       }
     }
-
-    if (event.payload?.$case === 'statusUpdate') {
-      const update = event.payload.value;
-      newContextId = update.contextId || newContextId;
-      newTaskId = update.taskId || newTaskId;
-
-      const { state, message } = update.status ?? {};
-      if (state !== undefined && TERMINAL_STATES.has(state)) {
-        const text = message?.parts?.[0]?.content;
-        const response = text?.$case === 'text' ? text.value : '(no text)';
-        process.stdout.write(`\n${styleText('yellow', 'Agent:')}\n${renderMarkdown(response)}\n`);
-        break;
-      }
-    }
-
-    if (event.payload?.$case === 'message') {
-      const text = event.payload.value.parts?.[0]?.content;
-      const response = text?.$case === 'text' ? text.value : '(no text)';
-      process.stdout.write(`\nAgent:\n${renderMarkdown(response)}\n`);
-    }
+  } finally {
+    ensureSpinnerStopped();
   }
 
   return { contextId: newContextId, taskId: newTaskId };
@@ -101,8 +131,57 @@ async function main() {
   );
   const client = await clientFactory.createFromUrl(url);
   const agentCard = await client.getAgentCard();
-  console.log(`Connected to: ${agentCard.name}`);
-  console.log('Type your message and press Enter. Type "exit" to quit.\n');
+
+  const width = 60;
+  const line = '─'.repeat(width);
+  const dim = (s: string) => styleText('dim', s);
+  const bold = (s: string) => styleText('bold', s);
+  const cyan = (s: string) => styleText('cyan', s);
+  const yellow = (s: string) => styleText('yellow', s);
+
+  console.log(cyan(`┌${line}┐`));
+  console.log(cyan('│') + ' ' + bold(agentCard.name.padEnd(width - 1)) + cyan('│'));
+  if (agentCard.version) {
+    console.log(cyan('│') + ' ' + dim(`v${agentCard.version}`.padEnd(width - 1)) + cyan('│'));
+  }
+  if (agentCard.description) {
+    const words = agentCard.description.split(' ');
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      if ((current + ' ' + word).trim().length > width - 2) {
+        lines.push(current.trim());
+        current = word;
+      } else {
+        current = (current + ' ' + word).trim();
+      }
+    }
+    if (current) lines.push(current.trim());
+    console.log(cyan(`├${line}┤`));
+    for (const l of lines) {
+      console.log(cyan('│') + ' ' + l.padEnd(width - 1) + cyan('│'));
+    }
+  }
+  if (agentCard.skills.length > 0) {
+    console.log(cyan(`├${line}┤`));
+    console.log(cyan('│') + ' ' + bold('Skills'.padEnd(width - 1)) + cyan('│'));
+    for (const skill of agentCard.skills) {
+      const tags = skill.tags.length > 0 ? `  ${dim(`[${skill.tags.join(', ')}]`)}` : '';
+      const nameLabel = `  • ${skill.name}`;
+      const visibleLen = nameLabel.length + (skill.tags.length > 0 ? 2 + skill.tags.join(', ').length + 2 : 0);
+      const pad = ' '.repeat(Math.max(0, width - 1 - visibleLen));
+      console.log(cyan('│') + ' ' + yellow(nameLabel) + tags + pad + cyan('│'));
+      if (skill.description) {
+        const desc = `    ${skill.description}`;
+        if (desc.length <= width - 1) {
+          console.log(cyan('│') + ' ' + dim(desc.padEnd(width - 1)) + cyan('│'));
+        }
+      }
+    }
+  }
+  console.log(cyan(`└${line}┘`));
+  console.log('');
+  console.log(dim('Type your message and press Enter. Type "exit" to quit.\n'));
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
