@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import * as readline from 'node:readline';
 import { parseArgs, styleText } from 'node:util';
 import { marked } from 'marked';
@@ -89,7 +90,7 @@ async function main() {
   const { positionals } = parseArgs({ allowPositionals: true });
   const url = positionals[0];
   if (!url) {
-    console.error('Usage: tsx src/test.ts <agent-url>');
+    console.error('Usage: a2a-client <agent-url>');
     process.exit(1);
   }
 

@@ -1,33 +1,47 @@
 {
   "name": "a2a-client",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Agent client using agent2agent protocol",
-  "main": "index.js",
+  "author": "Arnaud Buchholz",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "bin": {
+    "a2a-client": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"No tests\" && exit 0"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ArnaudBuchholz/a2a-client.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/ArnaudBuchholz/a2a-client/issues"
   },
   "homepage": "https://github.com/ArnaudBuchholz/a2a-client#readme",
-  "devDependencies": {
-    "@types/marked-terminal": "^6.1.1",
-    "@types/node": "^26.1.2",
-    "tsx": "^4.23.1",
-    "typescript": "^7.0.2"
-  },
   "dependencies": {
     "@a2a-js/sdk": "^1.0.1",
     "marked": "^15.0.12",
-    "marked-terminal": "^7.3.0",
-    "reserve": "^2.3.5"
+    "marked-terminal": "^7.3.0"
+  },
+  "devDependencies": {
+    "@types/marked-terminal": "^6.1.1",
+    "@types/node": "^26.1.2",
+    "semantic-release": "^25.0.8",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  },
+  "release": {
+    "branches": ["main"]
   }
 }
