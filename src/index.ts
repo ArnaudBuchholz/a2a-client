@@ -129,8 +129,26 @@ async function main() {
       transports: [new RestTransportFactory()],
     })
   );
-  const client = await clientFactory.createFromUrl(url);
-  const agentCard = await client.getAgentCard();
+
+  let client: Client;
+  try {
+    client = await clientFactory.createFromUrl(url);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const detail = code ? ` (${code})` : '';
+    console.error(styleText('red', `Cannot reach agent at ${url}${detail}`));
+    process.exit(1);
+  }
+
+  let agentCard: Awaited<ReturnType<Client['getAgentCard']>>;
+  try {
+    agentCard = await client.getAgentCard();
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const detail = code ? ` (${code})` : '';
+    console.error(styleText('red', `Cannot get agent card at ${url}${detail}`));
+    process.exit(1);
+  }
 
   const width = 60;
   const line = '─'.repeat(width);
