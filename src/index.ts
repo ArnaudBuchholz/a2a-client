@@ -184,9 +184,9 @@ async function main() {
     console.log(cyan(`├${line}┤`));
     console.log(cyan('│') + ' ' + bold('Skills'.padEnd(width - 1)) + cyan('│'));
     for (const skill of agentCard.skills) {
-      const tags = skill.tags.length > 0 ? `  ${dim(`[${skill.tags.join(', ')}]`)}` : '';
+      const tags = skill.tags && skill.tags.length > 0 ? `  ${dim(`[${skill.tags.join(', ')}]`)}` : '';
       const nameLabel = `  • ${skill.name}`;
-      const visibleLen = nameLabel.length + (skill.tags.length > 0 ? 2 + skill.tags.join(', ').length + 2 : 0);
+      const visibleLen = nameLabel.length + (skill.tags && skill.tags.length > 0 ? 2 + skill.tags.join(', ').length + 2 : 0);
       const pad = ' '.repeat(Math.max(0, width - 1 - visibleLen));
       console.log(cyan('│') + ' ' + yellow(nameLabel) + tags + pad + cyan('│'));
       if (skill.description) {
