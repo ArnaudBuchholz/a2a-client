@@ -139,7 +139,7 @@ async function runSlashPicker(rl: readline.Interface, commands: Command[]): Prom
 
       // Save cursor at prompt line, draw overlay below, restore
       process.stdout.write('\x1b7');
-      process.stdout.write('\n');
+      process.stdout.write('\n\x1b[J');
 
       if (matches.length === 0) {
         process.stdout.write(styleText('dim', '  (no commands match)') + '\x1b[K');
@@ -329,7 +329,7 @@ async function main() {
   let taskId = '';
 
   const COMMANDS: Command[] = [
-    { name: '/exit', description: 'Close the session and quit', handler: () => rl.close() },
+    { name: '/exit', description: 'Close the session and quit', handler: () => { rl.close(); process.exit(0); } },
     {
       name: '/new',
       description: 'Start a new conversation (fresh context)',
