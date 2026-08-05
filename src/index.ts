@@ -37,7 +37,9 @@ function startSpinner(): () => void {
   };
 }
 
-async function sendAndReceive(client: Client, userText: string, contextId: string, taskId: string): Promise<{ contextId: string; taskId: string }> {
+type UUID = `${string}-${string}-${string}-${string}-${string}`;
+
+async function sendAndReceive(client: Client, userText: string, contextId: UUID, taskId: string): Promise<{ contextId: UUID; taskId: string }> {
   const stream = client.sendMessageStream({
     message: {
       messageId: crypto.randomUUID(),
@@ -77,7 +79,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
 
       if (event.payload?.$case === 'task') {
         const task = event.payload.value as Task;
-        newContextId = task.contextId || newContextId;
+        newContextId = (task.contextId as UUID) || newContextId;
         newTaskId = task.id || newTaskId;
 
         const state = task.status?.state;
@@ -91,7 +93,7 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
 
       if (event.payload?.$case === 'statusUpdate') {
         const update = event.payload.value;
-        newContextId = update.contextId || newContextId;
+        newContextId = (update.contextId as UUID) || newContextId;
         newTaskId = update.taskId || newTaskId;
 
         const { state, message } = update.status ?? {};
@@ -114,6 +116,126 @@ async function sendAndReceive(client: Client, userText: string, contextId: strin
   }
 
   return { contextId: newContextId, taskId: newTaskId };
+}
+
+interface Command {
+  name: string;
+  description: string;
+  handler: () => void;
+}
+
+function getMatches(commands: Command[], query: string): Command[] {
+  const lower = query.toLowerCase();
+  return commands.filter(c => c.name.toLowerCase().includes(lower));
+}
+
+async function runSlashPicker(rl: readline.Interface, commands: Command[]): Promise<Command | null> {
+  return new Promise<Command | null>(resolve => {
+    let query = '';
+    let selectedIndex = 0;
+
+    const drawOverlay = () => {
+      const matches = getMatches(commands, query);
+
+      // Save cursor at prompt line, draw overlay below, restore
+      process.stdout.write('\x1b7');
+      process.stdout.write('\n');
+
+      if (matches.length === 0) {
+        process.stdout.write(styleText('dim', '  (no commands match)') + '\x1b[K');
+      } else {
+        for (let i = 0; i < matches.length; i++) {
+          const cmd = matches[i];
+          const line = `  ${cmd.name}  —  ${cmd.description}`;
+          if (i === selectedIndex) {
+            process.stdout.write(`\x1b[7m${line}\x1b[27m\x1b[K`);
+          } else {
+            process.stdout.write(line + '\x1b[K');
+          }
+          if (i < matches.length - 1) process.stdout.write('\n');
+        }
+      }
+
+      process.stdout.write('\x1b8');
+      readline.cursorTo(process.stdout, 0);
+      process.stdout.write('\x1b[2K' + styleText('yellow', 'You: ') + '/' + query);
+    };
+
+    const eraseOverlay = () => {
+      process.stdout.write('\x1b8');
+      process.stdout.write('\n\x1b[J'); // erase from here to end of screen
+      process.stdout.write('\x1b8');
+    };
+
+    const cleanup = (result: Command | null) => {
+      eraseOverlay();
+      readline.cursorTo(process.stdout, 0);
+      process.stdout.write('\x1b[2K');
+      process.stdout.write('\x1b[?25h');
+      process.stdin.off('keypress', onKeypress);
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      resolve(result);
+    };
+
+    const onKeypress = (_chunk: string, key: readline.Key) => {
+      if (!key) return;
+
+      if (key.ctrl && key.name === 'c') {
+        cleanup(null);
+        rl.close();
+        process.exit(0);
+      }
+
+      if (key.name === 'escape') {
+        cleanup(null);
+        return;
+      }
+
+      const matches = getMatches(commands, query);
+
+      if (key.name === 'return') {
+        cleanup(matches[selectedIndex] ?? null);
+        return;
+      }
+
+      if (key.name === 'up') {
+        selectedIndex = Math.max(0, selectedIndex - 1);
+        drawOverlay();
+        return;
+      }
+
+      if (key.name === 'down') {
+        selectedIndex = Math.min(Math.max(0, matches.length - 1), selectedIndex + 1);
+        drawOverlay();
+        return;
+      }
+
+      if (key.name === 'backspace') {
+        if (query === '') {
+          cleanup(null);
+        } else {
+          query = query.slice(0, -1);
+          selectedIndex = 0;
+          drawOverlay();
+        }
+        return;
+      }
+
+      if (key.sequence && !key.ctrl && !key.meta && key.sequence.length === 1) {
+        query += key.sequence;
+        selectedIndex = 0;
+        drawOverlay();
+      }
+    };
+
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdout.write('\x1b[?25l');
+    process.stdin.on('keypress', onKeypress);
+    drawOverlay();
+  });
 }
 
 async function main() {
@@ -199,31 +321,96 @@ async function main() {
   }
   console.log(cyan(`└${line}┘`));
   console.log('');
-  console.log(dim('Type your message and press Enter. Type "exit" to quit.\n'));
+  console.log(dim('Type your message and press Enter. Type / for commands.\n'));
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
 
-  let contextId = '';
+  let contextId: `${string}-${string}-${string}-${string}-${string}` = crypto.randomUUID();
   let taskId = '';
 
+  const COMMANDS: Command[] = [
+    { name: '/exit', description: 'Close the session and quit', handler: () => rl.close() },
+    {
+      name: '/new',
+      description: 'Start a new conversation (fresh context)',
+      handler: () => {
+        contextId = crypto.randomUUID();
+        taskId = '';
+        console.log(styleText('dim', 'New conversation started.\n'));
+      },
+    },
+  ];
+
+  const prompt = () => {
+    const ctx = contextId ? styleText('dim', ` [${contextId.slice(0, 8)}]`) : '';
+    process.stdout.write(styleText('yellow', 'You') + ctx + styleText('yellow', ': '));
+  };
+
   const ask = () => {
-    rl.question(styleText('yellow', 'You: '), async (input: string) => {
-      const text = input.trim();
-      if (text.toLowerCase() === 'exit') {
+    if (!process.stdin.isTTY) return;
+
+    prompt();
+    let lineBuffer = '';
+
+    readline.emitKeypressEvents(process.stdin);
+
+    const onKey = async (_chunk: string, key: readline.Key) => {
+      if (!key) return;
+
+      if (key.ctrl && key.name === 'c') {
         rl.close();
-        return;
+        process.exit(0);
       }
-      if (!text) {
+
+      if (key.name === 'return') {
+        process.stdin.off('keypress', onKey);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdout.write('\n');
+        const text = lineBuffer.trim();
+        if (!text) { ask(); return; }
+        try {
+          ({ contextId, taskId } = await sendAndReceive(client, text, contextId, taskId));
+        } catch (err) {
+          console.error('Error:', err);
+        }
         ask();
         return;
       }
-      try {
-        ({ contextId, taskId } = await sendAndReceive(client, text, contextId, taskId));
-      } catch (err) {
-        console.error('Error:', err);
+
+      if (key.name === 'backspace') {
+        if (lineBuffer.length > 0) {
+          lineBuffer = lineBuffer.slice(0, -1);
+          readline.moveCursor(process.stdout, -1, 0);
+          process.stdout.write('\x1b[K');
+        }
+        return;
       }
-      ask();
-    });
+
+      if (lineBuffer === '' && key.sequence === '/') {
+        process.stdin.off('keypress', onKey);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        readline.cursorTo(process.stdout, 0);
+        process.stdout.write('\x1b[2K');
+
+        const command = await runSlashPicker(rl, COMMANDS);
+        if (command) {
+          command.handler();
+        }
+        ask();
+        return;
+      }
+
+      if (key.sequence && !key.ctrl && !key.meta) {
+        lineBuffer += key.sequence;
+        process.stdout.write(key.sequence);
+      }
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('keypress', onKey);
   };
 
   ask();
