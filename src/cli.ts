@@ -219,8 +219,8 @@ export async function startCli(agentUrl: string): Promise<void> {
     ({ client, agentCard } = await createAgentSession(agentUrl));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    const detail = code ? ` (${code})` : '';
-    console.error(styleText('red', `Cannot connect to agent at ${agentUrl}${detail}`));
+    const detail = (code ? `(${code})` : '') + (err as Error).message;
+    console.error(styleText('red', `Cannot connect to agent at ${agentUrl} ${detail}`));
     process.exit(1);
   }
 
