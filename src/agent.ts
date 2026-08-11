@@ -1,4 +1,4 @@
-import { ClientFactory, ClientFactoryOptions, RestTransportFactory } from '@a2a-js/sdk/client';
+import { ClientFactory, ClientFactoryOptions, DefaultAgentCardResolver, JsonRpcTransportFactory, RestTransportFactory } from '@a2a-js/sdk/client';
 import { Client } from '@a2a-js/sdk/client';
 import { AgentCard } from '@a2a-js/sdk';
 import { Role, Task, TaskState } from '@a2a-js/sdk';
@@ -26,9 +26,14 @@ export interface SendResult {
 }
 
 export async function createAgentSession(url: string): Promise<AgentSession> {
+  const legacyCompat = { enabled: true };
   const clientFactory = new ClientFactory(
     ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
-      transports: [new RestTransportFactory()],
+      transports: [
+        new JsonRpcTransportFactory({ legacyCompat }),
+        new RestTransportFactory({ legacyCompat }),
+      ],
+      cardResolver: new DefaultAgentCardResolver({ legacyCompat }),
     })
   );
   const client = await clientFactory.createFromUrl(url);
